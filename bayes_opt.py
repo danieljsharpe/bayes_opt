@@ -1,6 +1,7 @@
 '''
 Pure Python implementation of Bayesian Optimisation (BO) for a continuous objective function.
 Features a variety of acquisition functions to deal with noise etc.
+The objective function is flexible, e.g. it can be the output of a simulation
 Daniel J. Sharpe
 Oct 2018
 '''
@@ -29,6 +30,8 @@ class Acquisition_Funcs(object):
         # print "costfunc(x)", self.costfunc(x)
         fval_best = np.max(self.obs_fvals[:niter])
         print "The current best value of fval is:", fval_best
+        # find x that maximises expected improvement ei
+        ei = 
 
     def knowledge_gradient(self, x):
         pass
@@ -87,6 +90,11 @@ class GPR(object):
     @staticmethod
     def gaussian_kernel(x, xp, alpha):
         s = alpha[0]*np.exp(-np.sum([alpha[i+1]*(x[i]-xp[i])**2 for i in range(len(x))]))
+        return s
+
+    @staticmethod
+    def matern_kernel(x, xp, alpha, nu):
+        s = 1.
         return s
 
     @staticmethod
