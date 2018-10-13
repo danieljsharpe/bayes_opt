@@ -31,7 +31,7 @@ class Acquisition_Funcs(object):
         fval_best = np.max(self.obs_fvals[:niter])
         print "The current best value of fval is:", fval_best
         # find x that maximises expected improvement ei
-        ei = 
+        ei = 1.
 
     def knowledge_gradient(self, x):
         pass
@@ -82,6 +82,7 @@ class GPR(object):
                                                  np.linalg.inv(self.covar[:n_iter,:n_iter])),
                                           covar_vec_new.transpose())
         print "mu_n, var_n:", mu_n, var_n
+        return mu_n, var_n
 
     ''' Function to evaluate the prior or posterior '''
     def eval_prob_distrib(self):
@@ -127,8 +128,8 @@ class Bayes_Opt(GPR, Acquisition_Funcs):
         self.calc_prior()
         for i in range(self.n_obs):
             self.acq_func((2.,2.),self.n_init_obs+i)
-
-            self.calc_posterior((2.,2.),10)
+            print "Calculating posterior at (2.,2.):"
+            mu_n, var_n = self.calc_posterior((2.,2.),10)
         '''
         self.gpr_main_loop()
         self.acq_main_loop(x)
@@ -153,6 +154,25 @@ if __name__ == "__main__":
     bayes_opt1 = Bayes_Opt((1,1), (costfunc,domain,0), (10,10))
     bayes_opt1.bo_main_loop()
 
+    '''
+    Simple 1D example with complete enumeration of the acquisition function
+    costfunc = lambda x: 0.3*exp(-0.5*(1./(0.03**2))*(x-0.12)**2) \
+                         0.4*exp(-0.5*(1./(0.06**2))*(x-0.46)**2) \
+                         0.6*exp(-0.5*(1./(0.01**2))*(x-0.70)**2)
+    domain = ((0.,1.),(0.,1.)
+
+    n_b4_stop=3
+    bayes_opt2 = Bayes_Opt((1,1), (constfunc,domain,0), (n_b4_stop,0))
+    bayes_opt2.bo_main_loop()
+    # after 3 iters, visualise the target & acquisition funcs and posterior distribn
+    fval_best = np.max(bayes_opt2.obs_fvals[:n_b4_stop])
+    ei = np.zeros(500,dtype=float)
+    for i in range(0,500,1):
+        x_coord = i/500.
+        mu_n, var_n = bayes_opt2.calc_posterior(x_coord,n_b4_stop)
+        ei[i] = 
+    plot
+    '''
     '''
     # Can call Acquisition_Funcs and GPR classes on their own
     acq_funcs1 = Acquisition_Funcs(lambda x: x**5, (-5.,+5.), 0)
