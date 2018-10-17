@@ -3,3 +3,6 @@
 TO-DO:
 
 -allow different initial space-filling method for initial observations (besides totally random)
+
+
+-self.means is totally redundant
