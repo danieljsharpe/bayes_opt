@@ -13,12 +13,8 @@ import numpy as np
 class Acquisition_Funcs(object):
 
     def __init__(self, costfunc, domain, af_choice):
-        print "Initialising Acquisition_Funcs"
         self.costfunc = costfunc # the objective (cost) function
         self.domain = domain     # domain (list of (min,max) of each coord) of objective function
-        print "Dimensionality of objective function is:", self.ndim
-        ### print "costfunc(2.)", costfunc(2)
-        ### print "self.costfunc(2.)", self.costfunc(2)
         # set acquisition function
         if af_choice == 0: self.acq_func = self.expec_impv
         elif af_choice == 1: self.acq_func = self.knowledge_gradient
@@ -28,7 +24,6 @@ class Acquisition_Funcs(object):
 
     def expec_impv(self, x, niter):
         print "Called expected improvement!"
-        # print "costfunc(x)", self.costfunc(x)
         fval_best = np.max(self.obs_fvals[:niter])
         print "The current best value of fval is:", fval_best
         # find x that maximises expected improvement ei
@@ -49,48 +44,29 @@ class Acquisition_Funcs(object):
 class GPR(object):
 
     def __init__(self, gpr_arg1, gpr_arg2):
+        # set mean function (of the prior) and kernel function defining the Gaussian process
         if gpr_arg1 == 1:
             self.mean_func = self.const_mean_func
-            self.mu = 0.
+            self.mu_0 = 0.
         if gpr_arg2 == 1: self.kernel = self.gaussian_kernel
         self.alpha = [0.5] + [100.]*(self.ndim)
-        #self.alpha = [0.4,10000.]
-        print "Initialising GPR"
 
     def gpr_main_loop(self):
         print "In main loop of GPR!"
 
     ''' Function to place a Gaussian process prior on the objective function '''
     def place_prior(self):
-        xspace = np.zeros((self.ndim,100),dtype=float)
+        self.xspace = np.zeros((self.ndim,self.n_grid),dtype=float)
         for i in range(self.ndim):
-            xspace[i,:] = [self.domain[i,0] + ((float(j)/100.)*self.domain[i,1]) for \
-                           j in range(100)]
-        # print "xspace is:\n", xspace, "\nxspace[:,0] is:\n", xspace[:,0]
-        # print "shape:", np.shape(xspace)
-        for i in range(100):
-            # print self.mean_func(xspace[:,i],self.mu)
-            self.means[i] = self.mean_func(xspace[:,i],self.mu)
-            for j in range(100):
-                self.covar[i,j] = self.kernel(xspace[:,i],xspace[:,j],self.alpha)
-        self.covar += 1.E-05*np.eye(105)
-        self.xspace = xspace
-        print "mean function of prior:\n", self.means[:100]
-        print "covar mtx of prior:\n", self.covar[:100,:100]
-
-    ''' Function for calculating the prior distribution '''
-    def calc_prior(self):
-        self.means[:self.n_init_obs] = self.mean_func(self.obs_coords[:self.n_init_obs],self.mu)
-        for i in range(self.n_init_obs):
-            self.means[i] = self.mean_func(self.obs_coords[i],self.mu)
-            pass
-            for j in range(self.n_init_obs):
-                self.covar[i,j] = self.kernel(self.obs_coords[i],self.obs_coords[j],self.alpha)
-                pass
-        ##self.covar[:self.n_init_obs,:self.n_init_obs] = self.kernel(self.obs_coords, \
-        ##        self.obs_coords, self.alpha)
-        print "Mean vector after calculation of prior:\n", self.means
-        print "Covariance matrix after calculation of prior:\n", self.covar
+            self.xspace[i,:] = [self.domain[i,0] + ((float(j)/float(self.n_grid)) \
+                                *self.domain[i,1]) for j in range(self.n_grid)]
+        for i in range(self.n_grid):
+            self.means[i] = self.mean_func(self.xspace[:,i],self.mu_0)
+            for j in range(self.n_grid):
+                self.covar[i,j] = self.kernel(self.xspace[:,i],self.xspace[:,j],self.alpha)
+        self.covar += 1.E-05*np.eye(self.n_grid)
+        print "mean vector of prior:\n", self.means
+        print "covar mtx of prior:\n", self.covar
 
     ''' Function to update the posterior distribution of a new observation, given a set of previous
         observations, according to Bayes' rule  '''
@@ -100,7 +76,7 @@ class GPR(object):
             covar_vec_new[i] = self.kernel(x,self.obs_coords[i],self.alpha)
         print "covar:\n", self.covar[:n_iter,:n_iter]
         mu_n = np.dot(np.dot(covar_vec_new,np.linalg.inv(self.covar[:n_iter,:n_iter])),
-                      (self.obs_fvals[:n_iter]-self.means[:n_iter])) + self.mu # should be "mu_0" ?
+                      (self.obs_fvals[:n_iter]-self.means[:n_iter])) + self.means # should be "mu_0" ?
         var_n = self.kernel(x,x,self.alpha) - np.dot(np.dot(covar_vec_new, \
                                                  np.linalg.inv(self.covar[:n_iter,:n_iter])),
                                           covar_vec_new.transpose())
@@ -114,36 +90,28 @@ class GPR(object):
             for j in range(self.n_init_obs):
                 K[i,j] = self.kernel(self.obs_coords[i],self.obs_coords[j],self.alpha)
         L = np.linalg.cholesky(K + 1.E-05*np.eye(self.n_init_obs))
-        K_s = np.zeros((self.n_init_obs,100),dtype=float)
+        K_s = np.zeros((self.n_init_obs,self.n_grid),dtype=float)
         for i in range(self.n_init_obs):
-            for j in range(100):
+            for j in range(self.n_grid):
                 K_s[i,j] = self.kernel(self.obs_coords[i],self.xspace[:,j],self.alpha)
         Lk = np.linalg.solve(L,K_s)
-        print "Lk:\n", Lk
-        self.mu = np.dot(Lk.T, np.linalg.solve(L,self.obs_fvals))
-        print "taking dot(Lk.T,Lk):\n", np.dot(Lk.T,Lk), "\nshape:\n", np.shape(np.dot(Lk.T,Lk))
-        self.covar[:100,:100] -= np.dot(Lk.T,Lk)
-        # L = np.linalg.cholesky(self.covar[:100,:100] + 1.E-05*np.eye(100) - np.dot(Lk.T,Lk))
+        self.means = np.dot(Lk.T, np.linalg.solve(L,self.obs_fvals))
+        self.covar -= np.dot(Lk.T,Lk)
         print "covariance matrix is now:\n", self.covar
-        # self.covar[:100,:100] = L
-
-    ''' Function to evaluate the prior or posterior '''
-    def eval_prob_distrib(self):
-        pass
 
     ''' Function to draw nsamples random functions from the Gaussian process: given n known points x, the
         mean vector mu, and the covariance matrix covar from the kernel function '''
-    def sample_gp(self, nsamples, n):
-        return np.array(np.random.multivariate_normal(self.mu[:n],self.covar[:n,:n],size=nsamples))
+    def sample_gp(self, nsamples):
+        return np.array(np.random.multivariate_normal(self.means,self.covar,size=nsamples))
 
     ''' Function to sample from the Gaussian process via the Cholesky decomposition of the covariance
         matrix. Note that the resulting vector has dimensions of the observed dataset (small) (?) '''
-    def cholesky_sample_gp(self, nsamples, n_iter):
-        A = np.linalg.cholesky(self.covar[:n_iter,:n_iter] + 1.E-05*np.eye(n_iter))
+    def cholesky_sample_gp(self, nsamples):
+        A = np.linalg.cholesky(self.covar)
         # f = np.zeros((nsamples,n_iter),dtype=float)
         # for i in range(nsamples):
             # f[i,:] = np.dot(A, np.random.normal(size=n_iter))
-        f = self.mu + np.dot(np.random.normal(size=(nsamples,n_iter)),A)
+        f = self.means + np.dot(np.random.normal(size=(nsamples,self.n_grid)),A)
         return f
 
     ''' Kernel functions (must be positive semi-definite) for evalutating elements of the
@@ -186,33 +154,24 @@ class Bayes_Opt(GPR, Acquisition_Funcs):
         self.ndim = len(domain)      # dimensionality of objective function
         self.n_init_obs = bo_args[0] # no. of initial observations to be made on objective func
         self.n_obs = bo_args[1]      # no. of subsequent observations to be made on objective func
+        self.n_grid = bo_args[2]     # no. of grid points on which to define the GP (defines dims
+                                     # of mean vector and covariance matrix)
         self.obs_coords = np.zeros((self.n_init_obs+self.n_obs,self.ndim),dtype=float)
         self.obs_fvals = np.zeros(self.n_init_obs+self.n_obs,dtype=float)
-        self.means = np.zeros(100+self.n_init_obs+self.n_obs,dtype=float) # vector of mean values
-        self.covar = np.zeros([100+self.n_init_obs+self.n_obs]*2,dtype=float) # covariance matrix
+        self.means = np.zeros(self.n_grid,dtype=float) # vector of mean values
+        self.covar = np.zeros([self.n_grid]*2,dtype=float) # covariance matrix
         Acquisition_Funcs.__init__(self, *acq_func_args)
         GPR.__init__(self, *gpr_args)
         print "Finished initialising"
 
     def bo_main_loop(self):
-        '''
-        # x = (2.,2.)
-        self.init_obs()
-        self.calc_prior()
-        for i in range(self.n_obs):
-            ## self.acq_func((2.,2.),self.n_init_obs+i)
-            ## print "Calculating posterior at (2.,2.):"
-            ## mu_n, var_n = self.calc_posterior((2.,2.),10)
-            x = np.random.uniform(size=self.ndim)  # random in range(0,1) instead of using acquisition function
-            self.update_posterior(x,self.n_init_obs+i)
-        '''
-        '''
-        self.gpr_main_loop()
-        self.acq_main_loop(x)
-        '''
+        #self.gpr_main_loop()
+        #self.acq_main_loop(x)
         self.place_prior()
         self.init_obs()
-        # self.cholesky_update_posterior()
+        for i in range(self.n_obs):
+            # self.cholesky_update_posterior()
+            pass
 
     ''' Make initial observations on the objective function '''
     def init_obs(self):
@@ -234,6 +193,7 @@ if __name__ == "__main__":
     bayes_opt1 = Bayes_Opt((1,1), (costfunc,domain,0), (10,10))
     bayes_opt1.bo_main_loop()
     '''
+
     #'''
     # Simple 1D example with complete enumeration of the acquisition function
     # sum of three Gaussians cost function
@@ -247,7 +207,7 @@ if __name__ == "__main__":
     print domain[0]
     print domain[0,0], domain[0,1]
     n_b4_stop, n_more_obs = 5, 0
-    bayes_opt2 = Bayes_Opt((1,1), (costfunc,domain,0), (n_b4_stop,n_more_obs))
+    bayes_opt2 = Bayes_Opt((1,1), (costfunc,domain,0), (n_b4_stop,n_more_obs,100))
     bayes_opt2.bo_main_loop()
 
     print "Made observations at:\n", bayes_opt2.obs_coords, "\nwith function values:\n", \
@@ -268,34 +228,35 @@ if __name__ == "__main__":
         print "mu_n:", mu_n, "var_n", var_n, "delta:", delta 
         # ei[i] = 
     '''
+    xspace = np.linspace(0,1,100)
 
-    # draw random functions from GP prior
-    ## f_prior = bayes_opt2.sample_gp(3,100)
-    f_prior = bayes_opt2.cholesky_sample_gp(5,100)
-    print "shape(f_prior):", np.shape(f_prior)
+    #'''
+    # draw random functions from GP prior and plot
+    ## f_prior = bayes_opt2.sample_gp(3)          # sample
+    f_prior = bayes_opt2.cholesky_sample_gp(3) # alternative: sample via Cholesky decomposn
+    fig_pr = plt.figure()
+    ax_pr = plt.axes()
+    for i in range(3):
+       ax_pr.plot(xspace, f_prior[i,:])
+    plt.show()
+    #'''
 
-    # plot the 1D costfunction and the GP prior
+    # plot the 1D costfunction
     fig = plt.figure()
     ax = plt.axes()
-    xspace = np.linspace(0,1,100)
     fvals = np.array([costfunc(np.array(x,ndmin=1)) for x in xspace])
     ax.plot(xspace, fvals, "k--", lw=2)
     plt.plot(bayes_opt2.obs_coords,bayes_opt2.obs_fvals,"o",color="red")
 
-    '''
-    print "f_prior:\n", f_prior
-    for i in range(3):
-       ax.plot(xspace, f_prior[i,:])
-    '''
     #'''
     # posterior to update mean function and covariance matrix
     bayes_opt2.cholesky_update_posterior()
-    print "mu_n is:\n", bayes_opt2.mu
-    ax.plot(xspace, bayes_opt2.mu, "r--", lw=2)
+    print "mu_n (mean vector at current iter) is:\n", bayes_opt2.means
+    ax.plot(xspace, bayes_opt2.means, "r--", lw=2)
 
     # draw random functions from GP posterior
-    # f_post = bayes_opt2.cholesky_sample_gp(3,100)
-    f_post = bayes_opt2.sample_gp(3,100)
+    ## f_post = bayes_opt2.sample_gp(3)            # sample
+    f_post = bayes_opt2.cholesky_sample_gp(3) # alternative: sample via Cholesky decomposn
     for i in range(3):
         ax.plot(xspace, f_post[i,:])
     #'''
