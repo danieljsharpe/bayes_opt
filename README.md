@@ -6,6 +6,12 @@ TO-DO:
 -allow initial observations to be provided as a list
 -acquistion functions e.g. EI
 -get 1D and 2D examples working
+-need to be able to update posterior based on a new set of observations - not just n_init_obs
+-MLE for hyperparameter estimation
+-KG & ES acquisition funcs
+-other kernels e.g. Matern1, Matern2, sqdist...
+
+-expand to include the related method of KRR (?)
 
 BUGS:
 

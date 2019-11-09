@@ -8,6 +8,12 @@ Oct 2018
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy
+print scipy.__version__
+from scipy.stats import norm
+from scipy.special import erfc
+from scipy.interpolate import SmoothBivariateSpline
+from scipy.interpolate import NdPPoly
 
 ''' Class containing a set of acquisition functions, one of which will be required by Bayes_Opt '''
 class Acquisition_Funcs(object):
@@ -22,12 +28,34 @@ class Acquisition_Funcs(object):
     def acq_main_loop(self, x):
         self.acq_func(x)
 
-    def expec_impv(self, x, niter):
+    def expec_impv(self, niter):
         print "Called expected improvement!"
         fval_best = np.max(self.obs_fvals[:niter])
         print "The current best value of fval is:", fval_best
         # find x that maximises expected improvement ei
-        ei = 1.
+        # enumerate the EI over the grid
+        ei = np.zeros(self.n_grid,dtype=float)
+        for i in range(self.n_grid):
+            delta = self.means[i] - fval_best
+            delta_p = np.max((0,delta))
+            t1 = self.std_dev[i]*erfc(delta/self.std_dev[i]) # erfc is cdf of std normal
+            t2 = abs(delta)*norm.pdf(delta/self.std_dev[i]) # std normal pdf
+            ei[i] = delta_p + t1 - t2
+        # select starting point for maximisation of EI
+        n_test_pts = 10
+        x_test = np.array([Acquisition_Funcs.uniform_randno(self.domain) \
+                          for i in range(n_test_pts)])
+        x_0 = np.amax(x_test)
+        # N.B. can do better, see e.g.:
+        # https://blogs.sas.com/content/iml/2014/06/11/initial-guess-for-optimization.html
+        # local maximisation of EI function - to find next point to observe
+        ## spline_res = spline(,ei,,order=3) # result of cubic spline interpolation at random points)
+        '''
+        while (n_iter < 100) and (force > 1.E-6):
+            x_i = griddata(...)
+        '''
+        return ei
+
 
     def knowledge_gradient(self, x):
         pass
@@ -39,6 +67,17 @@ class Acquisition_Funcs(object):
         for i in range(len(domain)):
             random_coords.append(np.random.uniform(domain[i][0],domain[i][1]))
         return np.array(random_coords)
+
+    @staticmethod
+    def normal_pdf(x):
+        pass
+
+    ''' Function calls NdPPoly to construct piecewise tensor product polynomials for interpolation
+        in an arbitary number of dimensions '''
+    def call_interpolate(self):
+        poly_coeffs = [4]*self.ndim # polynomial coeffs for each dimension
+        NdPPoly.construct_fast
+    
 
 ''' Class containing functions required for Gaussian process regression (GPR) '''
 class GPR(object):
@@ -83,7 +122,8 @@ class GPR(object):
         print "mu_n, var_n:", mu_n, var_n
         return mu_n, var_n
 
-    ''' Function to update the posterior distribution via Cholesky decomposition of the covariance matrix '''
+    ''' Function to update the posterior distribution via Cholesky decomposition of the covariance matrix 
+        (generally preferred to direct computation via Bayes' rule) '''
     def cholesky_update_posterior(self):
         K = np.zeros((self.n_init_obs,self.n_init_obs),dtype=float)
         for i in range(self.n_init_obs):
@@ -96,6 +136,7 @@ class GPR(object):
                 K_s[i,j] = self.kernel(self.obs_coords[i],self.xspace[:,j],self.alpha)
         Lk = np.linalg.solve(L,K_s)
         self.means = np.dot(Lk.T, np.linalg.solve(L,self.obs_fvals))
+        self.std_dev = np.sqrt(np.diag(self.covar) - np.sum(Lk**2,axis=0))
         self.covar -= np.dot(Lk.T,Lk)
         print "covariance matrix is now:\n", self.covar
 
@@ -232,7 +273,7 @@ if __name__ == "__main__":
 
     #'''
     # draw random functions from GP prior and plot
-    ## f_prior = bayes_opt2.sample_gp(3)          # sample
+    # f_prior = bayes_opt2.sample_gp(3)          # sample
     f_prior = bayes_opt2.cholesky_sample_gp(3) # alternative: sample via Cholesky decomposn
     fig_pr = plt.figure()
     ax_pr = plt.axes()
@@ -255,11 +296,15 @@ if __name__ == "__main__":
     ax.plot(xspace, bayes_opt2.means, "r--", lw=2)
 
     # draw random functions from GP posterior
-    ## f_post = bayes_opt2.sample_gp(3)            # sample
-    f_post = bayes_opt2.cholesky_sample_gp(3) # alternative: sample via Cholesky decomposn
+    f_post = bayes_opt2.sample_gp(3)            # sample
+    # f_post = bayes_opt2.cholesky_sample_gp(3) # alternative: sample via Cholesky decomposn
     for i in range(3):
         ax.plot(xspace, f_post[i,:])
     #'''
+
+    # find the EI acquisition function
+    ei = bayes_opt2.expec_impv(n_b4_stop)
+    ax.plot(xspace, ei, "b--", lw=2)
 
     plt.show()
 
